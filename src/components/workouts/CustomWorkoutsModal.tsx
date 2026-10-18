@@ -49,16 +49,29 @@ export const CustomWorkoutsModal: React.FC<CustomWorkoutsModalProps> = ({
   };
 
   const handleAddExercise = (ex: Exercise) => {
-    const isCardio = ex.type === 'cardio';
-    setExercises((prev) => [
-      ...prev,
-      {
+    const isContinuous = ex.hasSets === false || (ex.type === 'cardio' && !ex.hasSets && !ex.defaultTargetSeconds);
+    const isTimed = ex.setMetric === 'time' || (ex.defaultTargetSeconds && ex.defaultTargetSeconds > 0);
+
+    let newItem: PlannedExercise;
+    if (isContinuous) {
+      newItem = {
+        exerciseId: ex.id!,
+        targetDurationMinutes: ex.defaultTargetMinutes || 20,
+      };
+    } else if (isTimed) {
+      newItem = {
         exerciseId: ex.id!,
         targetSets: ex.defaultTargetSets || 3,
-        targetReps: isCardio ? undefined : ex.defaultTargetReps || '8-10',
-        targetDurationMinutes: isCardio ? ex.defaultTargetMinutes || 20 : undefined,
-      },
-    ]);
+        targetDurationSeconds: ex.defaultTargetSeconds || 30,
+      };
+    } else {
+      newItem = {
+        exerciseId: ex.id!,
+        targetSets: ex.defaultTargetSets || 3,
+        targetReps: ex.defaultTargetReps || '8-10',
+      };
+    }
+    setExercises((prev) => [...prev, newItem]);
   };
 
   const handleRemoveExercise = (idx: number) => {
@@ -75,24 +88,43 @@ export const CustomWorkoutsModal: React.FC<CustomWorkoutsModalProps> = ({
 
     const sanitizedExercises: PlannedExercise[] = exercises.map((item) => {
       const ex = allExercises.find((e) => e.id === item.exerciseId);
-      const isCardio = ex?.type === 'cardio';
+      const isContinuous =
+        ex?.hasSets === false ||
+        (ex?.type === 'cardio' && !ex?.hasSets && !ex?.defaultTargetSeconds && !item.targetDurationSeconds);
+      const isTimed =
+        ex?.setMetric === 'time' ||
+        (item.targetDurationSeconds !== undefined && item.targetDurationSeconds > 0) ||
+        (ex?.defaultTargetSeconds && ex.defaultTargetSeconds > 0);
+
+      if (isContinuous) {
+        return {
+          exerciseId: item.exerciseId,
+          notes: item.notes,
+          targetDurationMinutes:
+            item.targetDurationMinutes && item.targetDurationMinutes > 0
+              ? item.targetDurationMinutes
+              : ex?.defaultTargetMinutes || 20,
+        };
+      }
+
+      if (isTimed) {
+        return {
+          exerciseId: item.exerciseId,
+          notes: item.notes,
+          targetSets: item.targetSets && item.targetSets > 0 ? item.targetSets : ex?.defaultTargetSets || 3,
+          targetDurationSeconds:
+            item.targetDurationSeconds && item.targetDurationSeconds > 0
+              ? item.targetDurationSeconds
+              : ex?.defaultTargetSeconds || 30,
+        };
+      }
+
       return {
-        ...item,
-        targetSets: isCardio
-          ? undefined
-          : item.targetSets && item.targetSets > 0
-          ? item.targetSets
-          : ex?.defaultTargetSets || 3,
-        targetReps: isCardio
-          ? undefined
-          : item.targetReps && item.targetReps.trim()
-          ? item.targetReps.trim()
-          : ex?.defaultTargetReps || '8-10',
-        targetDurationMinutes: isCardio
-          ? item.targetDurationMinutes && item.targetDurationMinutes > 0
-            ? item.targetDurationMinutes
-            : ex?.defaultTargetMinutes || 20
-          : undefined,
+        exerciseId: item.exerciseId,
+        notes: item.notes,
+        targetSets: item.targetSets && item.targetSets > 0 ? item.targetSets : ex?.defaultTargetSets || 3,
+        targetReps:
+          item.targetReps && item.targetReps.trim() ? item.targetReps.trim() : ex?.defaultTargetReps || '8-10',
       };
     });
 
@@ -191,7 +223,6 @@ export const CustomWorkoutsModal: React.FC<CustomWorkoutsModalProps> = ({
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {exercises.map((item, idx) => {
                   const ex = allExercises.find((e) => e.id === item.exerciseId);
-                  const isCardio = ex?.type === 'cardio';
                   return (
                     <div
                       key={idx}
@@ -204,51 +235,106 @@ export const CustomWorkoutsModal: React.FC<CustomWorkoutsModalProps> = ({
                         <span className="text-[10px] text-textMuted">{ex?.category}</span>
                       </div>
 
-                      {isCardio ? (
-                        <div className="flex items-center space-x-1">
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            min="1"
-                            value={item.targetDurationMinutes !== undefined && item.targetDurationMinutes !== null ? item.targetDurationMinutes : ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              handleUpdateItem(idx, {
-                                targetDurationMinutes: val === '' ? undefined : parseInt(val, 10),
-                              });
-                            }}
-                            placeholder={String(ex?.defaultTargetMinutes || 20)}
-                            className="w-14 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
-                          />
-                          <span className="text-[10px] text-textMuted">m</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center space-x-1">
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            min="1"
-                            max="20"
-                            value={item.targetSets !== undefined && item.targetSets !== null ? item.targetSets : ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              handleUpdateItem(idx, {
-                                targetSets: val === '' ? undefined : parseInt(val, 10),
-                              });
-                            }}
-                            placeholder={String(ex?.defaultTargetSets || 3)}
-                            className="w-10 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
-                          />
-                          <span className="text-textMuted font-bold">×</span>
-                          <input
-                            type="text"
-                            value={item.targetReps ?? ''}
-                            onChange={(e) => handleUpdateItem(idx, { targetReps: e.target.value })}
-                            placeholder={ex?.defaultTargetReps || '8-10'}
-                            className="w-14 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
-                          />
-                        </div>
-                      )}
+                      {(() => {
+                        const isContinuous =
+                          ex?.hasSets === false ||
+                          (ex?.type === 'cardio' && !ex?.hasSets && !ex?.defaultTargetSeconds && !item.targetDurationSeconds);
+                        const isTimed =
+                          ex?.setMetric === 'time' ||
+                          (item.targetDurationSeconds !== undefined && item.targetDurationSeconds > 0) ||
+                          (ex?.defaultTargetSeconds && ex.defaultTargetSeconds > 0);
+
+                        if (isContinuous) {
+                          return (
+                            <div className="flex items-center space-x-1">
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min="1"
+                                value={item.targetDurationMinutes !== undefined && item.targetDurationMinutes !== null ? item.targetDurationMinutes : ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  handleUpdateItem(idx, {
+                                    targetDurationMinutes: val === '' ? undefined : parseInt(val, 10),
+                                  });
+                                }}
+                                placeholder={String(ex?.defaultTargetMinutes || 20)}
+                                className="w-14 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
+                              />
+                              <span className="text-[10px] text-textMuted">m</span>
+                            </div>
+                          );
+                        }
+
+                        if (isTimed) {
+                          return (
+                            <div className="flex items-center space-x-1">
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min="1"
+                                max="20"
+                                value={item.targetSets !== undefined && item.targetSets !== null ? item.targetSets : ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  handleUpdateItem(idx, {
+                                    targetSets: val === '' ? undefined : parseInt(val, 10),
+                                  });
+                                }}
+                                placeholder={String(ex?.defaultTargetSets || 3)}
+                                className="w-10 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
+                              />
+                              <span className="text-[10px] text-textMuted">sets</span>
+                              <span className="text-textMuted font-bold">×</span>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min="5"
+                                step="5"
+                                value={item.targetDurationSeconds !== undefined && item.targetDurationSeconds !== null ? item.targetDurationSeconds : ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  handleUpdateItem(idx, {
+                                    targetDurationSeconds: val === '' ? undefined : parseInt(val, 10),
+                                  });
+                                }}
+                                placeholder={String(ex?.defaultTargetSeconds || 30)}
+                                className="w-12 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
+                              />
+                              <span className="text-[10px] text-textMuted">s</span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="flex items-center space-x-1">
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min="1"
+                              max="20"
+                              value={item.targetSets !== undefined && item.targetSets !== null ? item.targetSets : ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                handleUpdateItem(idx, {
+                                  targetSets: val === '' ? undefined : parseInt(val, 10),
+                                });
+                              }}
+                              placeholder={String(ex?.defaultTargetSets || 3)}
+                              className="w-10 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
+                            />
+                            <span className="text-[10px] text-textMuted">sets</span>
+                            <span className="text-textMuted font-bold">×</span>
+                            <input
+                              type="text"
+                              value={item.targetReps ?? ''}
+                              onChange={(e) => handleUpdateItem(idx, { targetReps: e.target.value })}
+                              placeholder={ex?.defaultTargetReps || '8-10'}
+                              className="w-14 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
+                            />
+                          </div>
+                        );
+                      })()}
 
                       <button
                         type="button"

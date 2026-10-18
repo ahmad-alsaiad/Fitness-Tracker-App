@@ -1,13 +1,17 @@
 export type ExerciseType = 'lifting' | 'cardio';
+export type SetMetric = 'reps' | 'time';
 
 export interface Exercise {
   id?: number;
   name: string;
   type: ExerciseType;
   category: string; // e.g., 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Cardio', 'Abs'
+  hasSets?: boolean; // false for single continuous duration, true for set-based
+  setMetric?: SetMetric; // 'reps' or 'time'
   defaultTargetSets?: number;
   defaultTargetReps?: string; // e.g., '8-10' or '10-12'
-  defaultTargetMinutes?: number;
+  defaultTargetSeconds?: number; // e.g., 30 for 30s per set
+  defaultTargetMinutes?: number; // e.g., 20 for continuous cardio
   notes?: string;
   createdAt?: string;
 }
@@ -15,8 +19,9 @@ export interface Exercise {
 export interface PlannedExercise {
   exerciseId: number;
   targetSets?: number;
-  targetReps?: string; // for lifting
-  targetDurationMinutes?: number; // for cardio
+  targetReps?: string; // for reps-based sets
+  targetDurationSeconds?: number; // for timed sets (e.g. 30 for 30s)
+  targetDurationMinutes?: number; // for continuous cardio
   notes?: string;
 }
 
@@ -41,6 +46,7 @@ export interface WorkoutSet {
   setNumber: number;
   weightKg: number;
   reps: number;
+  durationSeconds?: number; // for timed sets (e.g. 30s, 45s)
   rpe?: number;
   isPR?: boolean;
 }

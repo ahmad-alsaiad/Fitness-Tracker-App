@@ -197,14 +197,22 @@ export const WorkoutsView: React.FC<WorkoutsViewProps> = ({
                 <div className="space-y-1.5">
                   {workoutLog.exercises.map((le, idx) => {
                     const ex = allExercises.find((e) => e.id === le.exerciseId);
-                    const isCardio = ex?.type === 'cardio';
+                    const isContinuous =
+                      ex?.hasSets === false ||
+                      (ex?.type === 'cardio' && !ex?.hasSets && !ex?.defaultTargetSeconds && le.completedDurationMinutes !== undefined);
+                    const isTimed =
+                      ex?.setMetric === 'time' ||
+                      (ex?.defaultTargetSeconds && ex.defaultTargetSeconds > 0) ||
+                      le.sets.some((s) => s.durationSeconds !== undefined);
 
                     return (
                       <div key={idx} className="flex justify-between items-center text-xs">
                         <span className="text-textPrimary font-medium truncate">{ex?.name || 'Exercise'}</span>
                         <span className="text-textMuted font-mono text-[11px] flex-shrink-0 ml-2">
-                          {isCardio
+                          {isContinuous
                             ? `${le.completedDurationMinutes || 20}m cardio`
+                            : isTimed
+                            ? `${le.sets.length} sets (${le.sets.map((s) => (s.durationSeconds || ex?.defaultTargetSeconds || 30) + 's').join(', ')})`
                             : `${le.sets.length} sets logged`}
                         </span>
                       </div>

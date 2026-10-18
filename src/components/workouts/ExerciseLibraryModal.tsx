@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { Plus, Dumbbell, Timer, Trash2, Search, X, Pencil, Check } from 'lucide-react';
+import { Plus, Dumbbell, Timer, Trash2, Search, X, Pencil, Check, Clock } from 'lucide-react';
 import { db } from '../../db/db';
 import type { Exercise, ExerciseType } from '../../types';
 import { Sheet } from '../common/Sheet';
@@ -20,11 +20,15 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
   exercises,
   onExerciseAdded,
 }) => {
+  type TrackingFormat = 'sets_reps' | 'sets_time' | 'continuous_time';
+
   const [name, setName] = useState('');
+  const [format, setFormat] = useState<TrackingFormat>('sets_reps');
   const [type, setType] = useState<ExerciseType>('lifting');
   const [category, setCategory] = useState('Chest');
   const [defaultSets, setDefaultSets] = useState('');
   const [defaultReps, setDefaultReps] = useState('');
+  const [defaultSeconds, setDefaultSeconds] = useState('');
   const [defaultMinutes, setDefaultMinutes] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -34,8 +38,12 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
 
   const resetForm = () => {
     setName('');
+    setFormat('sets_reps');
+    setType('lifting');
+    setCategory('Chest');
     setDefaultSets('');
     setDefaultReps('');
+    setDefaultSeconds('');
     setDefaultMinutes('');
     setEditingId(null);
   };
@@ -45,8 +53,18 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
     setName(ex.name);
     setType(ex.type);
     setCategory(ex.category);
+
+    if (ex.type === 'cardio' && ex.hasSets === false) {
+      setFormat('continuous_time');
+    } else if (ex.setMetric === 'time' || (ex.defaultTargetSeconds && ex.defaultTargetSeconds > 0)) {
+      setFormat('sets_time');
+    } else {
+      setFormat('sets_reps');
+    }
+
     setDefaultSets(ex.defaultTargetSets ? String(ex.defaultTargetSets) : '');
     setDefaultReps(ex.defaultTargetReps || '');
+    setDefaultSeconds(ex.defaultTargetSeconds ? String(ex.defaultTargetSeconds) : '');
     setDefaultMinutes(ex.defaultTargetMinutes ? String(ex.defaultTargetMinutes) : '');
     requestAnimationFrame(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
@@ -58,13 +76,21 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
     // Empty fields fall back to sensible defaults
     const sets = parseInt(defaultSets, 10);
     const minutes = parseInt(defaultMinutes, 10);
+    const seconds = parseInt(defaultSeconds, 10);
+
+    const isContinuous = format === 'continuous_time';
+    const isTimedSets = format === 'sets_time';
+
     const payload = {
       name: name.trim(),
-      type,
-      category: type === 'cardio' ? 'Cardio' : category,
-      defaultTargetSets: type === 'lifting' ? (sets > 0 ? sets : 3) : undefined,
-      defaultTargetReps: type === 'lifting' ? defaultReps.trim() || '8-10' : undefined,
-      defaultTargetMinutes: type === 'cardio' ? (minutes > 0 ? minutes : 20) : undefined,
+      type: isContinuous || (isTimedSets && category === 'Cardio') ? ('cardio' as ExerciseType) : type,
+      category: isContinuous ? 'Cardio' : category,
+      hasSets: !isContinuous,
+      setMetric: (isTimedSets ? 'time' : 'reps') as 'time' | 'reps',
+      defaultTargetSets: !isContinuous ? (sets > 0 ? sets : 3) : undefined,
+      defaultTargetReps: format === 'sets_reps' ? (defaultReps.trim() || '8-10') : undefined,
+      defaultTargetSeconds: isTimedSets ? (seconds > 0 ? seconds : 30) : undefined,
+      defaultTargetMinutes: isContinuous ? (minutes > 0 ? minutes : 20) : undefined,
     };
 
     if (editingId) {
@@ -126,33 +152,64 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
             </button>
           </div>
         )}
-        <div className="flex space-x-2">
+        <div className="grid grid-cols-3 gap-1.5 p-1 bg-surface rounded-xl border border-border-subtle">
           <button
             type="button"
             onClick={() => {
+              setFormat('sets_reps');
               setType('lifting');
-              setCategory('Chest');
+              if (category === 'Cardio') setCategory('Chest');
             }}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center space-x-1 transition-all ${
-              type === 'lifting' ? 'bg-primary text-canvas shadow-sm' : 'bg-surface text-textMuted border border-border-subtle'
+            className={`py-1.5 px-2 rounded-lg text-[11px] font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
+              format === 'sets_reps'
+                ? 'bg-primary text-canvas shadow-sm'
+                : 'text-textMuted hover:text-textPrimary'
             }`}
           >
-            <Dumbbell className="w-3.5 h-3.5" />
-            <span>Lifting (Sets & Reps)</span>
+            <div className="flex items-center gap-1">
+              <Dumbbell className="w-3.5 h-3.5" />
+              <span>Sets × Reps</span>
+            </div>
+            <span className="text-[9px] opacity-75 font-normal">e.g. 3 × 8-10 reps</span>
           </button>
 
           <button
             type="button"
             onClick={() => {
+              setFormat('sets_time');
+              setCategory('Cardio');
+            }}
+            className={`py-1.5 px-2 rounded-lg text-[11px] font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
+              format === 'sets_time'
+                ? 'bg-primary text-canvas shadow-sm'
+                : 'text-textMuted hover:text-textPrimary'
+            }`}
+          >
+            <div className="flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              <span>Sets × Time</span>
+            </div>
+            <span className="text-[9px] opacity-75 font-normal">e.g. 3 × 30 sec</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFormat('continuous_time');
               setType('cardio');
               setCategory('Cardio');
             }}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center space-x-1 transition-all ${
-              type === 'cardio' ? 'bg-primary text-canvas shadow-sm' : 'bg-surface text-textMuted border border-border-subtle'
+            className={`py-1.5 px-2 rounded-lg text-[11px] font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
+              format === 'continuous_time'
+                ? 'bg-primary text-canvas shadow-sm'
+                : 'text-textMuted hover:text-textPrimary'
             }`}
           >
-            <Timer className="w-3.5 h-3.5" />
-            <span>Cardio (Time)</span>
+            <div className="flex items-center gap-1">
+              <Timer className="w-3.5 h-3.5" />
+              <span>Continuous</span>
+            </div>
+            <span className="text-[9px] opacity-75 font-normal">e.g. 20m cardio</span>
           </button>
         </div>
 
@@ -161,16 +218,22 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={type === 'lifting' ? 'e.g. Incline Dumbbell Curl' : 'e.g. Stairmaster Intervals'}
+            placeholder={
+              format === 'sets_reps'
+                ? 'e.g. Incline Dumbbell Curl'
+                : format === 'sets_time'
+                  ? 'e.g. Jog in Place, Plank, Jumping Jacks'
+                  : 'e.g. Treadmill, Stairmaster, Bike'
+            }
             className="w-full bg-surface border border-border-subtle rounded-xl px-3 py-2 text-xs font-medium text-textPrimary focus:outline-none focus:border-primary placeholder:text-textMuted/40"
             required
           />
         </div>
 
-        {type === 'lifting' ? (
+        {format === 'sets_reps' && (
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="text-[9px] font-bold text-textMuted uppercase block mb-1">Muscle</label>
+              <label className="text-[9px] font-bold text-textMuted uppercase block mb-1">Target Muscle</label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -209,7 +272,57 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
               />
             </div>
           </div>
-        ) : (
+        )}
+
+        {format === 'sets_time' && (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-[9px] font-bold text-textMuted uppercase block mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs text-textPrimary focus:outline-none"
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[9px] font-bold text-textMuted uppercase block mb-1">Default Sets</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max="20"
+                value={defaultSets}
+                onChange={(e) => setDefaultSets(e.target.value)}
+                placeholder="3"
+                className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs text-textPrimary focus:outline-none text-center placeholder:text-textMuted/40"
+              />
+            </div>
+
+            <div>
+              <label className="text-[9px] font-bold text-textMuted uppercase block mb-1">Time / Set (sec)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="5"
+                max="600"
+                step="5"
+                value={defaultSeconds}
+                onChange={(e) => setDefaultSeconds(e.target.value)}
+                placeholder="30"
+                className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs text-textPrimary focus:outline-none text-center placeholder:text-textMuted/40"
+              />
+            </div>
+          </div>
+        )}
+
+        {format === 'continuous_time' && (
           <div>
             <label className="text-[9px] font-bold text-textMuted uppercase block mb-1">Default Duration (mins)</label>
             <input
@@ -219,7 +332,7 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
               value={defaultMinutes}
               onChange={(e) => setDefaultMinutes(e.target.value)}
               placeholder="20"
-              className="w-full bg-surface border border-border-subtle rounded-lg px-3 py-1 text-xs text-textPrimary focus:outline-none placeholder:text-textMuted/40"
+              className="w-full bg-surface border border-border-subtle rounded-lg px-3 py-1.5 text-xs text-textPrimary focus:outline-none placeholder:text-textMuted/40"
             />
           </div>
         )}
@@ -283,14 +396,24 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
               className="flex items-center justify-between p-2.5 rounded-xl bg-canvas border border-border-subtle/80 text-xs"
             >
               <div className="flex items-center space-x-2 min-w-0">
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ex.type === 'cardio' ? 'bg-primary' : 'bg-success'}`} />
+                <span
+                  className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    ex.setMetric === 'time' || (ex.defaultTargetSeconds && ex.defaultTargetSeconds > 0)
+                      ? 'bg-amber-400'
+                      : ex.type === 'cardio'
+                        ? 'bg-primary'
+                        : 'bg-success'
+                  }`}
+                />
                 <div className="min-w-0">
                   <span className="font-semibold text-textPrimary block truncate">{ex.name}</span>
                   <span className="text-[10px] text-textMuted font-medium">
                     {ex.category} •{' '}
-                    {ex.type === 'cardio'
-                      ? `${ex.defaultTargetMinutes || 20}m`
-                      : `${ex.defaultTargetSets || 3} sets × ${ex.defaultTargetReps || '8-10'}`}
+                    {ex.hasSets === false || (ex.type === 'cardio' && !ex.hasSets && !ex.defaultTargetSeconds)
+                      ? `${ex.defaultTargetMinutes || 20}m continuous`
+                      : ex.setMetric === 'time' || (ex.defaultTargetSeconds && ex.defaultTargetSeconds > 0)
+                        ? `${ex.defaultTargetSets || 3} sets × ${ex.defaultTargetSeconds || 30}s`
+                        : `${ex.defaultTargetSets || 3} sets × ${ex.defaultTargetReps || '8-10'}`}
                   </span>
                 </div>
               </div>

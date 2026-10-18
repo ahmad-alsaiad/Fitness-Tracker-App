@@ -119,18 +119,30 @@ export const WorkoutPreviewCard: React.FC<WorkoutPreviewCardProps> = ({
           {plannedWorkout.exercises.slice(0, 4).map((item, idx) => {
             const ex = exercisesMap[item.exerciseId];
             const name = ex?.name || 'Custom Exercise';
-            const isCardio = ex?.type === 'cardio';
+            const isContinuous =
+              ex?.hasSets === false ||
+              (ex?.type === 'cardio' && !ex?.hasSets && !ex?.defaultTargetSeconds && !item.targetDurationSeconds);
+            const isTimed =
+              ex?.setMetric === 'time' ||
+              (item.targetDurationSeconds !== undefined && item.targetDurationSeconds > 0) ||
+              (ex?.defaultTargetSeconds && ex.defaultTargetSeconds > 0);
 
             return (
               <div key={idx} className="flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isTimed ? 'bg-amber-400' : isContinuous ? 'bg-primary' : 'bg-success'
+                    }`}
+                  />
                   <span className="text-textPrimary font-medium">{name}</span>
                 </div>
                 <span className="text-textMuted font-medium">
-                  {isCardio
+                  {isContinuous
                     ? `${item.targetDurationMinutes || 20}m`
-                    : `${item.targetSets} sets × ${item.targetReps || '8-10'}`}
+                    : isTimed
+                    ? `${item.targetSets || 3} sets × ${item.targetDurationSeconds || ex?.defaultTargetSeconds || 30}s`
+                    : `${item.targetSets || 3} sets × ${item.targetReps || ex?.defaultTargetReps || '8-10'}`}
                 </span>
               </div>
             );

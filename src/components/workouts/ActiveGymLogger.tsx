@@ -103,7 +103,15 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
             let maxW = 0;
             const setStrings: string[] = [];
             for (const s of ex.sets) {
-              setStrings.push(`${s.weightKg}${settings.weightUnit} × ${s.reps}`);
+              if (s.durationSeconds) {
+                setStrings.push(
+                  s.weightKg > 0
+                    ? `${s.weightKg}${settings.weightUnit} × ${s.durationSeconds}s`
+                    : `${s.durationSeconds}s`
+                );
+              } else {
+                setStrings.push(`${s.weightKg}${settings.weightUnit} × ${s.reps}`);
+              }
               if (s.weightKg > maxW) maxW = s.weightKg;
             }
             hist[ex.exerciseId] = { lastSessionSets: setStrings, maxWeight: maxW };
@@ -124,14 +132,34 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
       if (plannedWorkout && plannedWorkout.exercises.length > 0) {
         const initial: LoggedExercise[] = plannedWorkout.exercises.map((p) => {
           const ex = allExercises.find((e) => e.id === p.exerciseId);
-          if (ex?.type === 'cardio') {
+          const isContinuous =
+            ex?.hasSets === false ||
+            (ex?.type === 'cardio' && !ex?.hasSets && !ex?.defaultTargetSeconds && !p.targetDurationSeconds);
+          const isTimed =
+            ex?.setMetric === 'time' ||
+            (p.targetDurationSeconds !== undefined && p.targetDurationSeconds > 0) ||
+            (ex?.defaultTargetSeconds && ex.defaultTargetSeconds > 0);
+
+          if (isContinuous) {
             return {
               exerciseId: p.exerciseId,
               sets: [],
               completedDurationMinutes: p.targetDurationMinutes || 20,
             };
           }
+
           const count = p.targetSets || 3;
+          if (isTimed) {
+            const sec = p.targetDurationSeconds || ex?.defaultTargetSeconds || 30;
+            const sets: WorkoutSet[] = Array.from({ length: count }, (_, idx) => ({
+              setNumber: idx + 1,
+              weightKg: 0,
+              reps: 0,
+              durationSeconds: sec,
+            }));
+            return { exerciseId: p.exerciseId, sets };
+          }
+
           const sets: WorkoutSet[] = Array.from({ length: count }, (_, idx) => ({
             setNumber: idx + 1,
             weightKg: 0,
@@ -154,17 +182,37 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
 
   // Add exercise to active session
   const handleAddExercise = (ex: Exercise) => {
-    const isCardio = ex.type === 'cardio';
-    const newEx: LoggedExercise = isCardio
-      ? { exerciseId: ex.id!, sets: [], completedDurationMinutes: ex.defaultTargetMinutes || 20 }
-      : {
-          exerciseId: ex.id!,
-          sets: Array.from({ length: ex.defaultTargetSets || 3 }, (_, idx) => ({
-            setNumber: idx + 1,
-            weightKg: 0,
-            reps: 8,
-          })),
-        };
+    const isContinuous = ex.hasSets === false || (ex.type === 'cardio' && !ex.hasSets && !ex.defaultTargetSeconds);
+    const isTimed = ex.setMetric === 'time' || (ex.defaultTargetSeconds && ex.defaultTargetSeconds > 0);
+
+    let newEx: LoggedExercise;
+    if (isContinuous) {
+      newEx = {
+        exerciseId: ex.id!,
+        sets: [],
+        completedDurationMinutes: ex.defaultTargetMinutes || 20,
+      };
+    } else if (isTimed) {
+      const sec = ex.defaultTargetSeconds || 30;
+      newEx = {
+        exerciseId: ex.id!,
+        sets: Array.from({ length: ex.defaultTargetSets || 3 }, (_, idx) => ({
+          setNumber: idx + 1,
+          weightKg: 0,
+          reps: 0,
+          durationSeconds: sec,
+        })),
+      };
+    } else {
+      newEx = {
+        exerciseId: ex.id!,
+        sets: Array.from({ length: ex.defaultTargetSets || 3 }, (_, idx) => ({
+          setNumber: idx + 1,
+          weightKg: 0,
+          reps: 8,
+        })),
+      };
+    }
     setLoggedExercises((prev) => [...prev, newEx]);
     setIsAddPickerOpen(false);
   };
@@ -214,11 +262,17 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
     setLoggedExercises((prev) => {
       const next = [...prev];
       const targetEx = { ...next[exIdx] };
+      const ex = allExercises.find((e) => e.id === targetEx.exerciseId);
+      const isTimed =
+        ex?.setMetric === 'time' ||
+        (ex?.defaultTargetSeconds && ex.defaultTargetSeconds > 0) ||
+        targetEx.sets.some((s) => s.durationSeconds !== undefined);
       const lastSet = targetEx.sets[targetEx.sets.length - 1];
       const newSet: WorkoutSet = {
         setNumber: targetEx.sets.length + 1,
         weightKg: lastSet?.weightKg || 0,
-        reps: lastSet?.reps || 8,
+        reps: isTimed ? 0 : lastSet?.reps || 8,
+        durationSeconds: isTimed ? lastSet?.durationSeconds || ex?.defaultTargetSeconds || 30 : undefined,
       };
       targetEx.sets = [...targetEx.sets, newSet];
       next[exIdx] = targetEx;
@@ -248,14 +302,48 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
 
   const handleFinish = async () => {
     const durationMinutes = Math.max(1, Math.round(secondsElapsed / 60));
-    const sanitizedExercises = loggedExercises.map((ex) => {
-      if (ex.completedDurationMinutes !== undefined) {
+    const sanitizedExercises = loggedExercises.map((loggedEx) => {
+      const ex = allExercises.find((e) => e.id === loggedEx.exerciseId);
+      const isContinuous =
+        ex?.hasSets === false ||
+        (ex?.type === 'cardio' && !ex?.hasSets && !ex?.defaultTargetSeconds && loggedEx.completedDurationMinutes !== undefined);
+      const isTimed =
+        ex?.setMetric === 'time' ||
+        (ex?.defaultTargetSeconds && ex.defaultTargetSeconds > 0) ||
+        loggedEx.sets.some((s) => s.durationSeconds !== undefined);
+
+      if (isContinuous) {
         return {
-          ...ex,
-          completedDurationMinutes: ex.completedDurationMinutes > 0 ? ex.completedDurationMinutes : 20,
+          ...loggedEx,
+          completedDurationMinutes:
+            loggedEx.completedDurationMinutes && loggedEx.completedDurationMinutes > 0
+              ? loggedEx.completedDurationMinutes
+              : ex?.defaultTargetMinutes || 20,
         };
       }
-      return ex;
+
+      if (isTimed) {
+        return {
+          ...loggedEx,
+          sets: loggedEx.sets.map((s, idx) => ({
+            ...s,
+            setNumber: idx + 1,
+            durationSeconds:
+              s.durationSeconds && s.durationSeconds > 0
+                ? s.durationSeconds
+                : ex?.defaultTargetSeconds || 30,
+          })),
+        };
+      }
+
+      return {
+        ...loggedEx,
+        sets: loggedEx.sets.map((s, idx) => ({
+          ...s,
+          setNumber: idx + 1,
+          reps: s.reps && s.reps > 0 ? s.reps : 8,
+        })),
+      };
     });
 
     await db.workoutLogs.put({
@@ -337,7 +425,13 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
       ) : (
         loggedExercises.map((loggedEx, exIdx) => {
           const ex = allExercises.find((e) => e.id === loggedEx.exerciseId);
-          const isCardio = ex?.type === 'cardio';
+          const isContinuous =
+            ex?.hasSets === false ||
+            (ex?.type === 'cardio' && !ex?.hasSets && !ex?.defaultTargetSeconds && loggedEx.completedDurationMinutes !== undefined);
+          const isTimed =
+            ex?.setMetric === 'time' ||
+            (ex?.defaultTargetSeconds && ex.defaultTargetSeconds > 0) ||
+            loggedEx.sets.some((s) => s.durationSeconds !== undefined);
           const history = historyMap[loggedEx.exerciseId];
 
           return (
@@ -349,21 +443,31 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
                 <div className="flex items-center space-x-2 min-w-0">
                   <div
                     className={`p-2 rounded-xl flex-shrink-0 ${
-                      isCardio ? 'bg-primary/10 text-primary' : 'bg-success/10 text-success'
+                      isContinuous
+                        ? 'bg-primary/10 text-primary'
+                        : isTimed
+                        ? 'bg-amber-400/10 text-amber-500'
+                        : 'bg-success/10 text-success'
                     }`}
                   >
-                    {isCardio ? <Timer className="w-4 h-4" /> : <Dumbbell className="w-4 h-4" />}
+                    {isContinuous ? (
+                      <Timer className="w-4 h-4" />
+                    ) : isTimed ? (
+                      <Clock className="w-4 h-4" />
+                    ) : (
+                      <Dumbbell className="w-4 h-4" />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-sm font-bold text-textPrimary truncate">{ex?.name || 'Exercise'}</h3>
                     <span className="text-[10px] text-textMuted font-medium uppercase tracking-wider">
-                      {ex?.category}
+                      {ex?.category} {isTimed ? '• Timed Sets' : isContinuous ? '• Continuous' : ''}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center space-x-1.5 flex-shrink-0">
-                  {!isCardio && (
+                  {!isContinuous && (
                     <button
                       type="button"
                       onClick={() => handleAddSet(exIdx)}
@@ -402,7 +506,7 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
               )}
 
               {/* Set logging */}
-              {isCardio ? (
+              {isContinuous ? (
                 <div className="bg-canvas/60 rounded-xl p-3 border border-border-subtle flex items-center justify-between">
                   <div>
                     <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider block">
@@ -418,7 +522,7 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
                           const v = e.target.value;
                           handleUpdateCardio(exIdx, v === '' ? 0 : parseInt(v, 10) || 0);
                         }}
-                        placeholder="20"
+                        placeholder={String(ex?.defaultTargetMinutes || 20)}
                         className="w-16 bg-surface border border-border-subtle rounded-lg px-2 py-1 text-center font-bold text-textPrimary text-sm focus:outline-none focus:border-primary placeholder:text-textMuted/40"
                       />
                       <span className="text-xs text-textMuted">minutes</span>
@@ -428,6 +532,84 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
                     <Check className="w-4 h-4" />
                     <span>Cardio Active</span>
                   </div>
+                </div>
+              ) : isTimed ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-textMuted uppercase tracking-wider px-1">
+                    <span className="col-span-2">Set</span>
+                    <span className="col-span-3">Weight ({settings.weightUnit})</span>
+                    <span className="col-span-4">Time (sec)</span>
+                    <span className="col-span-3 text-right">Status</span>
+                  </div>
+
+                  {loggedEx.sets.map((set, setIdx) => (
+                    <div
+                      key={setIdx}
+                      className="grid grid-cols-12 gap-2 items-center bg-canvas/60 p-2 rounded-xl border border-border-subtle/80"
+                    >
+                      <span className="col-span-2 font-bold text-xs text-textPrimary px-1">
+                        #{set.setNumber}
+                      </span>
+
+                      <div className="col-span-3">
+                        <input
+                          type="number"
+                          step="0.5"
+                          inputMode="decimal"
+                          value={set.weightKg || ''}
+                          onChange={(e) =>
+                            handleUpdateSet(exIdx, setIdx, {
+                              weightKg: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          placeholder="0"
+                          className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1.5 text-xs font-bold text-textPrimary focus:outline-none focus:border-primary text-center placeholder:text-textMuted/40"
+                        />
+                      </div>
+
+                      <div className="col-span-4">
+                        <div className="relative flex items-center">
+                          <input
+                            type="number"
+                            min="1"
+                            step="5"
+                            inputMode="numeric"
+                            value={set.durationSeconds !== undefined && set.durationSeconds !== null && set.durationSeconds > 0 ? set.durationSeconds : ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              handleUpdateSet(exIdx, setIdx, {
+                                durationSeconds: val === '' ? undefined : parseInt(val, 10),
+                              });
+                            }}
+                            placeholder={String(ex?.defaultTargetSeconds || 30)}
+                            className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1.5 text-xs font-bold text-textPrimary focus:outline-none focus:border-primary text-center placeholder:text-textMuted/40 pr-5"
+                          />
+                          <span className="text-[10px] text-textMuted font-bold absolute right-1.5 pointer-events-none">s</span>
+                        </div>
+                      </div>
+
+                      <div className="col-span-3 flex items-center justify-end space-x-1.5">
+                        {set.isPR ? (
+                          <span className="flex items-center space-x-0.5 px-1.5 py-0.5 rounded bg-success/20 text-success text-[10px] font-bold animate-bounce">
+                            <Award className="w-3 h-3" />
+                            <span>PR!</span>
+                          </span>
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-border-subtle" />
+                        )}
+
+                        {loggedEx.sets.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSet(exIdx, setIdx)}
+                            className="p-1 text-textMuted hover:text-danger rounded transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -459,7 +641,7 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
                             })
                           }
                           placeholder="0"
-                          className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1.5 text-xs font-bold text-textPrimary focus:outline-none focus:border-primary text-center"
+                          className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1.5 text-xs font-bold text-textPrimary focus:outline-none focus:border-primary text-center placeholder:text-textMuted/40"
                         />
                       </div>
 
@@ -475,7 +657,7 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
                             })
                           }
                           placeholder="0"
-                          className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1.5 text-xs font-bold text-textPrimary focus:outline-none focus:border-primary text-center"
+                          className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1.5 text-xs font-bold text-textPrimary focus:outline-none focus:border-primary text-center placeholder:text-textMuted/40"
                         />
                       </div>
 

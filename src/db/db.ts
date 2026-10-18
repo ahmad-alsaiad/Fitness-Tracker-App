@@ -197,13 +197,34 @@ export const DEFAULT_EXERCISES: Omit<Exercise, 'id'>[] = [
 /** Build a PlannedExercise from an exercise using its defaults. */
 export function plannedFromExercise(ex: Exercise): {
   exerciseId: number;
-  targetSets: number;
+  targetSets?: number;
   targetReps?: string;
+  targetDurationSeconds?: number;
   targetDurationMinutes?: number;
 } {
-  return ex.type === 'cardio'
-    ? { exerciseId: ex.id!, targetSets: 1, targetDurationMinutes: ex.defaultTargetMinutes || 20 }
-    : { exerciseId: ex.id!, targetSets: ex.defaultTargetSets || 3, targetReps: ex.defaultTargetReps || '8-10' };
+  // If continuous cardio (e.g. treadmill without sets)
+  if (ex.type === 'cardio' && ex.hasSets === false) {
+    return {
+      exerciseId: ex.id!,
+      targetDurationMinutes: ex.defaultTargetMinutes || 20,
+    };
+  }
+
+  // If timed sets (e.g. jog in place: 3 sets of 30s)
+  if (ex.setMetric === 'time' || (ex.defaultTargetSeconds && ex.defaultTargetSeconds > 0)) {
+    return {
+      exerciseId: ex.id!,
+      targetSets: ex.defaultTargetSets || 3,
+      targetDurationSeconds: ex.defaultTargetSeconds || 30,
+    };
+  }
+
+  // Reps-based sets
+  return {
+    exerciseId: ex.id!,
+    targetSets: ex.defaultTargetSets || 3,
+    targetReps: ex.defaultTargetReps || '8-10',
+  };
 }
 
 /**
