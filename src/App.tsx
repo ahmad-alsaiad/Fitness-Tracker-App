@@ -123,7 +123,7 @@ export function App() {
       />
 
       {/* Date Scroller: Completely hidden during active workout sessions so user cannot change dates accidentally */}
-      {!isWorkoutActive && (activeTab === 'overview' || activeTab === 'workouts' || activeTab === 'photos') && (
+      {!isWorkoutActive && (activeTab === 'overview' || activeTab === 'workouts') && (
         <DateScroller
           selectedDate={selectedDate}
           onSelectDate={(date) => setSelectedDate(date)}

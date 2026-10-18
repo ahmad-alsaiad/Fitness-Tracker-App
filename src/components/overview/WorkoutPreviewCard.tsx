@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dumbbell, Play, CalendarPlus, CheckCircle, XCircle, RotateCcw, Edit2 } from 'lucide-react';
+import { Dumbbell, Play, CalendarPlus, CheckCircle, XCircle, RotateCcw, Edit2, Moon } from 'lucide-react';
 import type { PlannedWorkout, WorkoutLog, Exercise } from '../../types';
 
 interface WorkoutPreviewCardProps {
@@ -21,6 +21,7 @@ export const WorkoutPreviewCard: React.FC<WorkoutPreviewCardProps> = ({
 }) => {
   const isCompleted = workoutLog?.status === 'completed';
   const isCancelled = workoutLog?.status === 'cancelled';
+  const isRestDay = !isCompleted && !isCancelled && !!plannedWorkout?.isRestDay;
 
   return (
     <div className="bg-surface rounded-2xl p-4 border border-border-subtle shadow-sm">
@@ -28,16 +29,18 @@ export const WorkoutPreviewCard: React.FC<WorkoutPreviewCardProps> = ({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-2">
           <div className="p-2 rounded-xl bg-primary/10 text-primary">
-            <Dumbbell className="w-4 h-4" />
+            {isRestDay ? <Moon className="w-4 h-4" /> : <Dumbbell className="w-4 h-4" />}
           </div>
           <div>
             <h3 className="text-sm font-bold text-textPrimary">
               {isCompleted
                 ? workoutLog.title
-                : plannedWorkout
-                ? plannedWorkout.title
                 : isCancelled
                 ? workoutLog.title || 'Scheduled Session'
+                : isRestDay
+                ? plannedWorkout?.title || 'Rest Day'
+                : plannedWorkout
+                ? plannedWorkout.title
                 : 'No Workout Planned'}
             </h3>
             <p className="text-[11px] text-textMuted">
@@ -45,6 +48,8 @@ export const WorkoutPreviewCard: React.FC<WorkoutPreviewCardProps> = ({
                 ? `Completed session • ${workoutLog.durationMinutes || 45} mins`
                 : isCancelled
                 ? 'Session Skipped'
+                : isRestDay
+                ? 'Scheduled recovery day • Rest & Grow'
                 : plannedWorkout
                 ? `${plannedWorkout.exercises.length} prescribed exercises`
                 : 'Rest or plan your routine'}
@@ -70,6 +75,13 @@ export const WorkoutPreviewCard: React.FC<WorkoutPreviewCardProps> = ({
           >
             <XCircle className="w-3.5 h-3.5" />
             <span>{workoutLog.cancellationType === 'justified' ? 'Justified Skip' : 'Unjustified Skip'}</span>
+          </span>
+        )}
+
+        {isRestDay && (
+          <span className="flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/15 text-primary border border-primary/30">
+            <Moon className="w-3.5 h-3.5" />
+            <span>Rest Day</span>
           </span>
         )}
       </div>
@@ -102,7 +114,7 @@ export const WorkoutPreviewCard: React.FC<WorkoutPreviewCardProps> = ({
       )}
 
       {/* Planned Exercises List */}
-      {plannedWorkout && (
+      {plannedWorkout && !isRestDay && plannedWorkout.exercises.length > 0 && (
         <div className="bg-canvas/60 rounded-xl p-3 border border-border-subtle/70 mb-3 space-y-2">
           {plannedWorkout.exercises.slice(0, 4).map((item, idx) => {
             const ex = exercisesMap[item.exerciseId];
@@ -134,7 +146,26 @@ export const WorkoutPreviewCard: React.FC<WorkoutPreviewCardProps> = ({
 
       {/* Actions */}
       <div className="flex items-center space-x-2 pt-1">
-        {!isCompleted && !isCancelled ? (
+        {isRestDay ? (
+          <>
+            <button
+              type="button"
+              onClick={onPlanWorkout}
+              className="flex-1 py-2.5 px-4 rounded-xl bg-canvas border border-border-subtle text-textPrimary font-semibold text-xs flex items-center justify-center space-x-1.5 hover:bg-surface transition-colors"
+            >
+              <CalendarPlus className="w-3.5 h-3.5 text-primary" />
+              <span>Plan Workout Instead</span>
+            </button>
+            <button
+              type="button"
+              onClick={onStartWorkout}
+              className="py-2.5 px-3 rounded-xl bg-canvas border border-border-subtle text-textMuted hover:text-textPrimary text-xs font-semibold flex items-center justify-center space-x-1"
+            >
+              <Play className="w-3.5 h-3.5 text-primary" />
+              <span>Train</span>
+            </button>
+          </>
+        ) : !isCompleted && !isCancelled ? (
           <>
             <button
               type="button"

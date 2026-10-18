@@ -14,7 +14,7 @@ export interface Exercise {
 
 export interface PlannedExercise {
   exerciseId: number;
-  targetSets: number;
+  targetSets?: number;
   targetReps?: string; // for lifting
   targetDurationMinutes?: number; // for cardio
   notes?: string;
@@ -34,6 +34,7 @@ export interface PlannedWorkout {
   exercises: PlannedExercise[];
   templateId?: number;
   notes?: string;
+  isRestDay?: boolean;
 }
 
 export interface WorkoutSet {
@@ -65,6 +66,7 @@ export interface WorkoutLog {
   durationMinutes?: number;
   notes?: string;
   loggedAt?: string;
+  isRestDay?: boolean;
 }
 
 export interface DailyBiometrics {

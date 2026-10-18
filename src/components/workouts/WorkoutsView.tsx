@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, CalendarPlus, Dumbbell, CheckCircle2, XCircle, Library, Layers, RotateCcw } from 'lucide-react';
+import { Play, CalendarPlus, Dumbbell, CheckCircle2, XCircle, Library, Layers, RotateCcw, Moon } from 'lucide-react';
 import { ActiveGymLogger } from './ActiveGymLogger';
 import { WorkoutPlannerModal } from './WorkoutPlannerModal';
 import { ExerciseLibraryModal } from './ExerciseLibraryModal';
@@ -44,6 +44,7 @@ export const WorkoutsView: React.FC<WorkoutsViewProps> = ({
 
   const isCompleted = workoutLog?.status === 'completed';
   const isCancelled = workoutLog?.status === 'cancelled';
+  const isRestDay = !isCompleted && !isCancelled && !!plannedWorkout?.isRestDay;
 
   // 7 days of the currently selected week (Sunday through Saturday)
   const currentWeekDays = weekDays(selectedDate);
@@ -54,7 +55,27 @@ export const WorkoutsView: React.FC<WorkoutsViewProps> = ({
       title: template.name,
       exercises: template.exercises,
       templateId: template.id,
+      isRestDay: false,
     });
+    onDataChanged();
+  };
+
+  const handleMarkRestDay = async () => {
+    await db.plannedWorkouts.put({
+      date: selectedDate,
+      title: 'Rest Day',
+      exercises: [],
+      isRestDay: true,
+    });
+    const existing = await db.workoutLogs.get(selectedDate);
+    if (existing?.status === 'cancelled') {
+      await db.workoutLogs.delete(selectedDate);
+    }
+    onDataChanged();
+  };
+
+  const handleClearRestDay = async () => {
+    await db.plannedWorkouts.delete(selectedDate);
     onDataChanged();
   };
 
@@ -113,15 +134,17 @@ export const WorkoutsView: React.FC<WorkoutsViewProps> = ({
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <span className="text-[10px] font-bold text-primary uppercase tracking-wider block mb-1">
-                  Session • {selectedDate}
+                  {isRestDay ? `Recovery • ${selectedDate}` : `Session • ${selectedDate}`}
                 </span>
                 <h3 className="text-lg font-bold text-textPrimary leading-tight truncate">
                   {isCompleted
                     ? workoutLog.title
-                    : plannedWorkout
-                    ? plannedWorkout.title
                     : isCancelled
                     ? workoutLog.title || 'Scheduled Session'
+                    : isRestDay
+                    ? plannedWorkout?.title || 'Rest Day'
+                    : plannedWorkout
+                    ? plannedWorkout.title
                     : 'No Routine Scheduled'}
                 </h3>
                 <p className="text-xs text-textMuted mt-1">
@@ -131,9 +154,11 @@ export const WorkoutsView: React.FC<WorkoutsViewProps> = ({
                     ? `Skipped (${workoutLog.cancellationType === 'justified' ? 'Justified' : 'Unjustified'}: ${
                         workoutLog.cancellationReason || 'No reason'
                       })`
+                    : isRestDay
+                    ? 'Scheduled recovery day. Focus on nutrition, hydration, and sleep.'
                     : plannedWorkout
                     ? `${plannedWorkout.exercises.length} prescribed exercises waiting`
-                    : 'Plan your lifts and cardio or pick a custom workout'}
+                    : 'Plan your lifts and cardio, pick a custom workout, or schedule rest'}
                 </p>
               </div>
 
@@ -152,6 +177,12 @@ export const WorkoutsView: React.FC<WorkoutsViewProps> = ({
                   }`}
                 >
                   <XCircle className="w-6 h-6" />
+                </div>
+              )}
+
+              {isRestDay && (
+                <div className="p-2.5 rounded-2xl bg-primary/15 text-primary border border-primary/30 flex-shrink-0">
+                  <Moon className="w-6 h-6" />
                 </div>
               )}
             </div>
@@ -184,7 +215,35 @@ export const WorkoutsView: React.FC<WorkoutsViewProps> = ({
 
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-2 pt-1">
-              {!isCompleted && !isCancelled ? (
+              {isRestDay ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setIsPlannerOpen(true)}
+                    className="py-2.5 px-3 rounded-xl bg-canvas border border-border-subtle text-textPrimary hover:bg-surface text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+                  >
+                    <CalendarPlus className="w-4 h-4 text-primary" />
+                    <span>Plan Workout Instead</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleClearRestDay}
+                    className="py-2.5 px-3 rounded-xl bg-canvas border border-border-subtle text-danger hover:bg-danger/10 text-xs font-semibold transition-colors"
+                  >
+                    Clear Rest Day
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSessionActive(true)}
+                    className="col-span-2 py-2.5 px-4 rounded-xl bg-canvas border border-border-subtle text-textMuted hover:text-textPrimary hover:bg-surface text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+                  >
+                    <Play className="w-3.5 h-3.5 text-primary" />
+                    <span>Train Anyway (Start Session)</span>
+                  </button>
+                </>
+              ) : !isCompleted && !isCancelled ? (
                 <>
                   <button
                     type="button"
@@ -206,11 +265,22 @@ export const WorkoutsView: React.FC<WorkoutsViewProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setIsCancelModalOpen(true)}
-                    className="py-2.5 px-3 rounded-xl bg-canvas border border-border-subtle text-danger hover:bg-danger/10 text-xs font-semibold transition-colors"
+                    onClick={handleMarkRestDay}
+                    className="py-2.5 px-3 rounded-xl bg-canvas border border-border-subtle text-textMuted hover:text-primary hover:bg-surface text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
                   >
-                    Skip Session
+                    <Moon className="w-4 h-4 text-primary" />
+                    <span>Mark Rest Day</span>
                   </button>
+
+                  {plannedWorkout && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCancelModalOpen(true)}
+                      className="col-span-2 py-2 px-3 rounded-xl bg-canvas border border-border-subtle text-danger hover:bg-danger/10 text-xs font-semibold transition-colors"
+                    >
+                      Skip Session
+                    </button>
+                  )}
                 </>
               ) : isCancelled ? (
                 <>

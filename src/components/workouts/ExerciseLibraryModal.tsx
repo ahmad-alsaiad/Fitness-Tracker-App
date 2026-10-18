@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, Dumbbell, Timer, Trash2, Search, X } from 'lucide-react';
+import React, { useState, useMemo, useRef } from 'react';
+import { Plus, Dumbbell, Timer, Trash2, Search, X, Pencil, Check } from 'lucide-react';
 import { db } from '../../db/db';
 import type { Exercise, ExerciseType } from '../../types';
 import { Sheet } from '../common/Sheet';
@@ -23,28 +23,57 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
   const [name, setName] = useState('');
   const [type, setType] = useState<ExerciseType>('lifting');
   const [category, setCategory] = useState('Chest');
-  const [defaultSets, setDefaultSets] = useState(3);
-  const [defaultReps, setDefaultReps] = useState('8-10');
-  const [defaultMinutes, setDefaultMinutes] = useState(25);
+  const [defaultSets, setDefaultSets] = useState('');
+  const [defaultReps, setDefaultReps] = useState('');
+  const [defaultMinutes, setDefaultMinutes] = useState('');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [confirm, confirmDialog] = useConfirm();
+
+  const resetForm = () => {
+    setName('');
+    setDefaultSets('');
+    setDefaultReps('');
+    setDefaultMinutes('');
+    setEditingId(null);
+  };
+
+  const startEdit = (ex: Exercise) => {
+    setEditingId(ex.id ?? null);
+    setName(ex.name);
+    setType(ex.type);
+    setCategory(ex.category);
+    setDefaultSets(ex.defaultTargetSets ? String(ex.defaultTargetSets) : '');
+    setDefaultReps(ex.defaultTargetReps || '');
+    setDefaultMinutes(ex.defaultTargetMinutes ? String(ex.defaultTargetMinutes) : '');
+    requestAnimationFrame(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    await db.exercises.add({
+    // Empty fields fall back to sensible defaults
+    const sets = parseInt(defaultSets, 10);
+    const minutes = parseInt(defaultMinutes, 10);
+    const payload = {
       name: name.trim(),
       type,
       category: type === 'cardio' ? 'Cardio' : category,
-      defaultTargetSets: type === 'lifting' ? defaultSets : undefined,
-      defaultTargetReps: type === 'lifting' ? defaultReps : undefined,
-      defaultTargetMinutes: type === 'cardio' ? defaultMinutes : undefined,
-      createdAt: new Date().toISOString(),
-    });
+      defaultTargetSets: type === 'lifting' ? (sets > 0 ? sets : 3) : undefined,
+      defaultTargetReps: type === 'lifting' ? defaultReps.trim() || '8-10' : undefined,
+      defaultTargetMinutes: type === 'cardio' ? (minutes > 0 ? minutes : 20) : undefined,
+    };
 
-    setName('');
+    if (editingId) {
+      await db.exercises.update(editingId, payload);
+    } else {
+      await db.exercises.add({ ...payload, createdAt: new Date().toISOString() });
+    }
+
+    resetForm();
     onExerciseAdded();
   };
 
@@ -86,7 +115,17 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
       {confirmDialog}
 
       {/* New Exercise Form */}
-      <form onSubmit={handleCreate} className="bg-canvas/70 rounded-xl p-3 border border-border-subtle space-y-3">
+      <form ref={formRef} onSubmit={handleCreate} className={`bg-canvas/70 rounded-xl p-3 border space-y-3 ${editingId ? 'border-primary/60' : 'border-border-subtle'}`}>
+        {editingId && (
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-primary flex items-center gap-1">
+              <Pencil className="w-3 h-3" /> Editing exercise
+            </span>
+            <button type="button" onClick={resetForm} className="text-[11px] text-textMuted hover:text-textPrimary">
+              Cancel
+            </button>
+          </div>
+        )}
         <div className="flex space-x-2">
           <button
             type="button"
@@ -149,11 +188,13 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
               <label className="text-[9px] font-bold text-textMuted uppercase block mb-1">Default Sets</label>
               <input
                 type="number"
+                inputMode="numeric"
                 min="1"
-                max="10"
+                max="20"
                 value={defaultSets}
-                onChange={(e) => setDefaultSets(parseInt(e.target.value, 10) || 3)}
-                className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs text-textPrimary focus:outline-none text-center"
+                onChange={(e) => setDefaultSets(e.target.value)}
+                placeholder="3"
+                className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs text-textPrimary focus:outline-none text-center placeholder:text-textMuted/40"
               />
             </div>
 
@@ -164,7 +205,7 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
                 value={defaultReps}
                 onChange={(e) => setDefaultReps(e.target.value)}
                 placeholder="8-10"
-                className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs text-textPrimary focus:outline-none text-center"
+                className="w-full bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs text-textPrimary focus:outline-none text-center placeholder:text-textMuted/40"
               />
             </div>
           </div>
@@ -173,10 +214,12 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
             <label className="text-[9px] font-bold text-textMuted uppercase block mb-1">Default Duration (mins)</label>
             <input
               type="number"
+              inputMode="numeric"
               min="1"
               value={defaultMinutes}
-              onChange={(e) => setDefaultMinutes(parseInt(e.target.value, 10) || 20)}
-              className="w-full bg-surface border border-border-subtle rounded-lg px-3 py-1 text-xs text-textPrimary focus:outline-none"
+              onChange={(e) => setDefaultMinutes(e.target.value)}
+              placeholder="20"
+              className="w-full bg-surface border border-border-subtle rounded-lg px-3 py-1 text-xs text-textPrimary focus:outline-none placeholder:text-textMuted/40"
             />
           </div>
         )}
@@ -185,8 +228,8 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
           type="submit"
           className="w-full py-2 rounded-xl bg-primary text-canvas font-bold text-xs flex items-center justify-center space-x-1 hover:bg-primary-hover transition-colors shadow-sm"
         >
-          <Plus className="w-4 h-4" />
-          <span>Add Exercise to Library</span>
+          {editingId ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          <span>{editingId ? 'Save Changes' : 'Add Exercise to Library'}</span>
         </button>
       </form>
 
@@ -252,14 +295,24 @@ export const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleDelete(ex.id)}
-                className="p-1.5 text-textMuted hover:text-danger rounded-lg transition-colors flex-shrink-0"
-                title="Delete exercise"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => startEdit(ex)}
+                  className="p-1.5 text-textMuted hover:text-primary rounded-lg transition-colors"
+                  title="Edit exercise"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(ex.id)}
+                  className="p-1.5 text-textMuted hover:text-danger rounded-lg transition-colors"
+                  title="Delete exercise"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ))
         )}

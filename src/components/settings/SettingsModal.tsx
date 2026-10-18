@@ -26,13 +26,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onSettingsUpdated,
 }) => {
-  const [calorieTarget, setCalorieTarget] = useState(settings.calorieTarget);
-  const [proteinTarget, setProteinTarget] = useState(settings.proteinTarget);
-  const [carbsTarget, setCarbsTarget] = useState(settings.carbsTarget || 250);
-  const [fatsTarget, setFatsTarget] = useState(settings.fatsTarget || 65);
+  const [calorieTarget, setCalorieTarget] = useState<string>(String(settings.calorieTarget || ''));
+  const [proteinTarget, setProteinTarget] = useState<string>(String(settings.proteinTarget || ''));
+  const [carbsTarget, setCarbsTarget] = useState<string>(String(settings.carbsTarget || 250));
+  const [fatsTarget, setFatsTarget] = useState<string>(String(settings.fatsTarget || 65));
   const [fixedWeighInDay, setFixedWeighInDay] = useState(settings.fixedWeighInDay);
-  const [waterTargetMl, setWaterTargetMl] = useState(settings.waterTargetMl);
-  const [stepsTarget, setStepsTarget] = useState(settings.stepsTarget);
+  const [waterTargetMl, setWaterTargetMl] = useState<string>(String(settings.waterTargetMl || ''));
+  const [stepsTarget, setStepsTarget] = useState<string>(String(settings.stepsTarget || ''));
   const [weightUnit, setWeightUnit] = useState(settings.weightUnit);
   const [habits, setHabits] = useState<string[]>(settings.customHabitNames);
   const [newHabitText, setNewHabitText] = useState('');
@@ -47,13 +47,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   React.useEffect(() => {
     if (isOpen) {
-      setCalorieTarget(settings.calorieTarget);
-      setProteinTarget(settings.proteinTarget);
-      setCarbsTarget(settings.carbsTarget || 250);
-      setFatsTarget(settings.fatsTarget || 65);
+      setCalorieTarget(String(settings.calorieTarget || ''));
+      setProteinTarget(String(settings.proteinTarget || ''));
+      setCarbsTarget(String(settings.carbsTarget || 250));
+      setFatsTarget(String(settings.fatsTarget || 65));
       setFixedWeighInDay(settings.fixedWeighInDay);
-      setWaterTargetMl(settings.waterTargetMl);
-      setStepsTarget(settings.stepsTarget);
+      setWaterTargetMl(String(settings.waterTargetMl || ''));
+      setStepsTarget(String(settings.stepsTarget || ''));
       setWeightUnit(settings.weightUnit);
       setHabits(settings.customHabitNames || []);
       setTargetHistory(settings.targetHistory || []);
@@ -65,16 +65,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
+    const cTarget = parseInt(calorieTarget, 10) || settings.calorieTarget || 2200;
+    const pTarget = parseInt(proteinTarget, 10) || settings.proteinTarget || 160;
+    const carbTarget = parseInt(carbsTarget, 10) || settings.carbsTarget || 250;
+    const fTarget = parseInt(fatsTarget, 10) || settings.fatsTarget || 65;
+    const wTarget = parseInt(waterTargetMl, 10) || settings.waterTargetMl || 3000;
+    const sTarget = parseInt(stepsTarget, 10) || settings.stepsTarget || 10000;
+
     let updatedHistory = [...targetHistory];
     if (applyMode === 'from-date') {
       const newPeriod: DailyTargetPeriod = {
         startDate: effectiveStartDate,
-        calorieTarget,
-        proteinTarget,
-        carbsTarget,
-        fatsTarget,
-        waterTargetMl,
-        stepsTarget,
+        calorieTarget: cTarget,
+        proteinTarget: pTarget,
+        carbsTarget: carbTarget,
+        fatsTarget: fTarget,
+        waterTargetMl: wTarget,
+        stepsTarget: sTarget,
         note: phaseNote.trim() || undefined,
       };
       updatedHistory = [
@@ -85,12 +92,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       updatedHistory = [
         {
           startDate: '2020-01-01',
-          calorieTarget,
-          proteinTarget,
-          carbsTarget,
-          fatsTarget,
-          waterTargetMl,
-          stepsTarget,
+          calorieTarget: cTarget,
+          proteinTarget: pTarget,
+          carbsTarget: carbTarget,
+          fatsTarget: fTarget,
+          waterTargetMl: wTarget,
+          stepsTarget: sTarget,
           note: 'All-time target',
         },
       ];
@@ -98,13 +105,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
     await db.userSettings.put({
       ...settings,
-      calorieTarget,
-      proteinTarget,
-      carbsTarget,
-      fatsTarget,
+      calorieTarget: cTarget,
+      proteinTarget: pTarget,
+      carbsTarget: carbTarget,
+      fatsTarget: fTarget,
       fixedWeighInDay,
-      waterTargetMl,
-      stepsTarget,
+      waterTargetMl: wTarget,
+      stepsTarget: sTarget,
       weightUnit,
       customHabitNames: habits,
       targetHistory: updatedHistory,
@@ -294,8 +301,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="number"
                 inputMode="numeric"
                 value={calorieTarget}
-                onChange={(e) => setCalorieTarget(parseInt(e.target.value, 10) || 0)}
-                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary"
+                onChange={(e) => setCalorieTarget(e.target.value)}
+                placeholder={String(settings.calorieTarget || 2200)}
+                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary placeholder:text-textMuted/40"
               />
             </div>
             <div>
@@ -306,8 +314,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="number"
                 inputMode="numeric"
                 value={proteinTarget}
-                onChange={(e) => setProteinTarget(parseInt(e.target.value, 10) || 0)}
-                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary"
+                onChange={(e) => setProteinTarget(e.target.value)}
+                placeholder={String(settings.proteinTarget || 160)}
+                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary placeholder:text-textMuted/40"
               />
             </div>
           </div>
@@ -322,8 +331,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="number"
                 inputMode="numeric"
                 value={carbsTarget}
-                onChange={(e) => setCarbsTarget(parseInt(e.target.value, 10) || 0)}
-                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary"
+                onChange={(e) => setCarbsTarget(e.target.value)}
+                placeholder={String(settings.carbsTarget || 250)}
+                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary placeholder:text-textMuted/40"
               />
             </div>
             <div>
@@ -334,8 +344,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 type="number"
                 inputMode="numeric"
                 value={fatsTarget}
-                onChange={(e) => setFatsTarget(parseInt(e.target.value, 10) || 0)}
-                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary"
+                onChange={(e) => setFatsTarget(e.target.value)}
+                placeholder={String(settings.fatsTarget || 65)}
+                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary placeholder:text-textMuted/40"
               />
             </div>
           </div>
@@ -495,8 +506,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 step="250"
                 inputMode="numeric"
                 value={waterTargetMl}
-                onChange={(e) => setWaterTargetMl(parseInt(e.target.value, 10) || 0)}
-                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary"
+                onChange={(e) => setWaterTargetMl(e.target.value)}
+                placeholder={String(settings.waterTargetMl || 3000)}
+                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary placeholder:text-textMuted/40"
               />
             </div>
             <div>
@@ -508,8 +520,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 step="500"
                 inputMode="numeric"
                 value={stepsTarget}
-                onChange={(e) => setStepsTarget(parseInt(e.target.value, 10) || 0)}
-                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary"
+                onChange={(e) => setStepsTarget(e.target.value)}
+                placeholder={String(settings.stepsTarget || 10000)}
+                className="w-full bg-canvas border border-border-subtle rounded-xl px-3 py-2 text-sm font-bold text-textPrimary focus:outline-none focus:border-primary placeholder:text-textMuted/40"
               />
             </div>
           </div>

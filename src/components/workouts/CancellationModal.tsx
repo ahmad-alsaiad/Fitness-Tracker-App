@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldAlert, CheckCircle, AlertTriangle, Trash2 } from 'lucide-react';
+import { ShieldAlert, CheckCircle, AlertTriangle, Trash2, Moon } from 'lucide-react';
 import { db } from '../../db/db';
 import type { CancellationType, WorkoutLog } from '../../types';
 import { Sheet } from '../common/Sheet';
@@ -88,6 +88,20 @@ export const CancellationModal: React.FC<CancellationModalProps> = ({
     onClose();
   };
 
+  const handleMarkAsRestDay = async () => {
+    if (existingLog) {
+      await db.workoutLogs.delete(date);
+    }
+    await db.plannedWorkouts.put({
+      date,
+      title: 'Rest Day',
+      exercises: [],
+      isRestDay: true,
+    });
+    onSuccess?.();
+    onClose();
+  };
+
   const isEditing = existingLog?.status === 'cancelled';
   const activeTone = type === 'justified' ? 'success' : 'danger';
 
@@ -127,6 +141,24 @@ export const CancellationModal: React.FC<CancellationModalProps> = ({
       <div className="p-3 rounded-xl bg-canvas/60 border border-border-subtle/80 flex items-center space-x-2 text-xs">
         <AlertTriangle className="w-4 h-4 text-primary flex-shrink-0" />
         <p className="text-textMuted">Honest tracking builds discipline.</p>
+      </div>
+
+      {/* Rest Day Shortcut */}
+      <div className="bg-canvas/80 border border-border-subtle rounded-xl p-3 flex items-center justify-between gap-2">
+        <div className="flex items-center space-x-2 min-w-0">
+          <Moon className="w-4 h-4 text-primary flex-shrink-0" />
+          <div className="text-xs">
+            <span className="font-semibold text-textPrimary block">Scheduled recovery instead?</span>
+            <span className="text-[10px] text-textMuted">Rest days are not counted as skips.</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleMarkAsRestDay}
+          className="px-2.5 py-1.5 rounded-lg bg-surface border border-border-subtle hover:border-primary/50 text-primary text-xs font-bold transition-colors whitespace-nowrap"
+        >
+          Mark as Rest Day
+        </button>
       </div>
 
       {/* Category */}

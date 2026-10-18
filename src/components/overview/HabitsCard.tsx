@@ -66,8 +66,12 @@ export const HabitsCard: React.FC<HabitsCardProps> = ({
   const toggleHabit = (name: string) => save({ customHabits: { ...customHabits, [name]: !customHabits[name] } });
 
   const saveSteps = () => {
-    const parsed = parseInt(stepsInput, 10);
-    if (!isNaN(parsed) && parsed >= 0) save({ steps: parsed });
+    if (stepsInput.trim() === '') {
+      save({ steps: settings.stepsTarget || 10000 });
+    } else {
+      const parsed = parseInt(stepsInput, 10);
+      if (!isNaN(parsed) && parsed >= 0) save({ steps: parsed });
+    }
     setIsEditingSteps(false);
   };
 
@@ -278,7 +282,8 @@ export const HabitsCard: React.FC<HabitsCardProps> = ({
                   inputMode="numeric"
                   value={stepsInput}
                   onChange={(e) => setStepsInput(e.target.value)}
-                  className="w-24 bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs font-bold text-textPrimary focus:outline-none focus:border-primary"
+                  placeholder={String(settings.stepsTarget || 10000)}
+                  className="w-24 bg-surface border border-border-subtle rounded-lg px-2 py-1 text-xs font-bold text-textPrimary focus:outline-none focus:border-primary placeholder:text-textMuted/40"
                   autoFocus
                 />
                 <button type="submit" className="px-2 py-1.5 rounded-lg bg-primary text-canvas text-xs font-bold">

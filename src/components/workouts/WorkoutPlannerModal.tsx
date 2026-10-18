@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trash2, CalendarPlus, Check, Copy, Layers, BookmarkPlus } from 'lucide-react';
+import { Trash2, CalendarPlus, Check, Copy, Layers, BookmarkPlus, Moon } from 'lucide-react';
 import { db, addDays } from '../../db/db';
 import type { PlannedWorkout, PlannedExercise, Exercise, WorkoutTemplate } from '../../types';
 import { Sheet } from '../common/Sheet';
@@ -31,12 +31,15 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [items, setItems] = useState<PlannedExercise[]>([]);
+  const [isRestDay, setIsRestDay] = useState(false);
   const [showAddPicker, setShowAddPicker] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => {
     if (!isOpen) return;
-    setTitle(plannedWorkout?.title || 'Workout Session');
+    const isRest = !!plannedWorkout?.isRestDay;
+    setIsRestDay(isRest);
+    setTitle(plannedWorkout?.title || (isRest ? 'Rest Day' : 'Workout Session'));
     setItems(plannedWorkout?.exercises ? [...plannedWorkout.exercises] : []);
     setShowAddPicker(false);
   }, [isOpen, plannedWorkout, date]);
@@ -49,6 +52,7 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
       targetReps: isCardio ? undefined : ex.defaultTargetReps || '8-10',
       targetDurationMinutes: isCardio ? ex.defaultTargetMinutes || 20 : undefined,
     };
+    setIsRestDay(false);
     setItems((prev) => [...prev, newItem]);
   };
 
@@ -62,6 +66,7 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
 
   // Apply a custom workout template
   const handleApplyTemplate = (t: WorkoutTemplate) => {
+    setIsRestDay(false);
     setTitle(t.name);
     setItems([...t.exercises]);
   };
@@ -83,6 +88,7 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
     const lastWeekKey = addDays(date, -7);
     const lastWeekPlan = await db.plannedWorkouts.get(lastWeekKey);
     if (lastWeekPlan && lastWeekPlan.exercises.length > 0) {
+      setIsRestDay(false);
       setTitle(lastWeekPlan.title);
       setItems([...lastWeekPlan.exercises]);
     } else {
@@ -90,14 +96,59 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
     }
   };
 
+  const handleMarkAsRestDay = async () => {
+    await db.plannedWorkouts.put({
+      date,
+      title: 'Rest Day',
+      exercises: [],
+      isRestDay: true,
+    });
+    // Clear any skip logged on this date
+    const existing = await db.workoutLogs.get(date);
+    if (existing?.status === 'cancelled') {
+      await db.workoutLogs.delete(date);
+    }
+    onSaved();
+    onClose();
+  };
+
   const handleSave = async () => {
+    if (isRestDay) {
+      await handleMarkAsRestDay();
+      return;
+    }
+
     if (items.length === 0) {
       await db.plannedWorkouts.delete(date);
     } else {
+      const sanitizedItems: PlannedExercise[] = items.map((it) => {
+        const ex = allExercises.find((e) => e.id === it.exerciseId);
+        const isCardio = ex?.type === 'cardio';
+        return {
+          ...it,
+          targetSets: isCardio
+            ? undefined
+            : it.targetSets && it.targetSets > 0
+            ? it.targetSets
+            : ex?.defaultTargetSets || 3,
+          targetReps: isCardio
+            ? undefined
+            : it.targetReps && it.targetReps.trim()
+            ? it.targetReps.trim()
+            : ex?.defaultTargetReps || '8-10',
+          targetDurationMinutes: isCardio
+            ? it.targetDurationMinutes && it.targetDurationMinutes > 0
+              ? it.targetDurationMinutes
+              : ex?.defaultTargetMinutes || 20
+            : undefined,
+        };
+      });
+
       await db.plannedWorkouts.put({
         date,
         title: title.trim() || 'Workout Session',
-        exercises: items,
+        exercises: sanitizedItems,
+        isRestDay: false,
       });
     }
     onSaved();
@@ -106,8 +157,8 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
 
   const handleClearRoutine = async () => {
     const ok = await confirm({
-      title: 'Clear this routine?',
-      message: `All scheduled exercises for ${date} will be removed.`,
+      title: 'Clear this plan?',
+      message: `Scheduled workout/rest day for ${date} will be removed.`,
       confirmLabel: 'Clear',
     });
     if (ok) {
@@ -149,6 +200,38 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
       }
     >
       {confirmDialog}
+
+      {/* Rest Day Banner / Toggle */}
+      {isRestDay ? (
+        <div className="bg-primary/10 border border-primary/30 rounded-xl p-3 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Moon className="w-5 h-5 text-primary" />
+            <div>
+              <span className="text-xs font-bold text-textPrimary block">Scheduled Rest Day</span>
+              <span className="text-[10px] text-textMuted">Focus on recovery, nutrition & sleep</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setIsRestDay(false);
+              setTitle('Workout Session');
+            }}
+            className="px-2.5 py-1 rounded-lg bg-surface border border-border-subtle text-primary text-xs font-semibold hover:bg-canvas"
+          >
+            Plan Workout Instead
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={handleMarkAsRestDay}
+          className="w-full py-2 px-3 rounded-xl bg-canvas border border-border-subtle hover:border-primary/50 text-textMuted hover:text-primary text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+        >
+          <Moon className="w-4 h-4 text-primary" />
+          <span>Plan as Rest Day</span>
+        </button>
+      )}
 
       {/* Title Input + Quick Action Buttons */}
       <div className="space-y-2">
@@ -250,7 +333,7 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
 
         {items.length === 0 ? (
           <div className="text-center py-8 text-textMuted text-xs bg-canvas/40 rounded-xl border border-border-subtle space-y-2">
-            <p>No exercises scheduled yet.</p>
+            <p>{isRestDay ? 'Rest day scheduled. No exercises needed.' : 'No exercises scheduled yet.'}</p>
             <button
               type="button"
               onClick={() => setShowAddPicker(true)}
@@ -279,14 +362,17 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
                     <div className="flex items-center space-x-1.5 flex-shrink-0">
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="1"
-                        value={item.targetDurationMinutes || 20}
-                        onChange={(e) =>
+                        value={item.targetDurationMinutes !== undefined && item.targetDurationMinutes !== null ? item.targetDurationMinutes : ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
                           handleUpdateItem(index, {
-                            targetDurationMinutes: parseInt(e.target.value, 10) || 0,
-                          })
-                        }
-                        className="w-14 bg-surface border border-border-subtle rounded-lg px-2 py-1 text-center font-bold text-textPrimary focus:outline-none"
+                            targetDurationMinutes: val === '' ? undefined : parseInt(val, 10),
+                          });
+                        }}
+                        placeholder={String(ex?.defaultTargetMinutes || 20)}
+                        className="w-14 bg-surface border border-border-subtle rounded-lg px-2 py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
                       />
                       <span className="text-[10px] text-textMuted">m</span>
                     </div>
@@ -295,25 +381,28 @@ export const WorkoutPlannerModal: React.FC<WorkoutPlannerModalProps> = ({
                       <div className="flex items-center space-x-1">
                         <input
                           type="number"
+                          inputMode="numeric"
                           min="1"
-                          max="10"
-                          value={item.targetSets}
-                          onChange={(e) =>
+                          max="20"
+                          value={item.targetSets !== undefined && item.targetSets !== null ? item.targetSets : ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
                             handleUpdateItem(index, {
-                              targetSets: parseInt(e.target.value, 10) || 1,
-                            })
-                          }
-                          className="w-10 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none"
+                              targetSets: val === '' ? undefined : parseInt(val, 10),
+                            });
+                          }}
+                          placeholder={String(ex?.defaultTargetSets || 3)}
+                          className="w-10 bg-surface border border-border-subtle rounded-lg py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
                         />
                         <span className="text-[10px] text-textMuted">sets</span>
                       </div>
                       <span className="text-textMuted font-bold">×</span>
                       <input
                         type="text"
-                        value={item.targetReps || '8-10'}
+                        value={item.targetReps ?? ''}
                         onChange={(e) => handleUpdateItem(index, { targetReps: e.target.value })}
-                        className="w-14 bg-surface border border-border-subtle rounded-lg px-1 py-1 text-center font-bold text-textPrimary focus:outline-none"
-                        placeholder="8-10"
+                        className="w-14 bg-surface border border-border-subtle rounded-lg px-1 py-1 text-center font-bold text-textPrimary focus:outline-none placeholder:text-textMuted/40"
+                        placeholder={ex?.defaultTargetReps || '8-10'}
                       />
                     </div>
                   )}

@@ -248,12 +248,22 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
 
   const handleFinish = async () => {
     const durationMinutes = Math.max(1, Math.round(secondsElapsed / 60));
+    const sanitizedExercises = loggedExercises.map((ex) => {
+      if (ex.completedDurationMinutes !== undefined) {
+        return {
+          ...ex,
+          completedDurationMinutes: ex.completedDurationMinutes > 0 ? ex.completedDurationMinutes : 20,
+        };
+      }
+      return ex;
+    });
+
     await db.workoutLogs.put({
       date,
       title: plannedWorkout?.title || 'Gym Session',
       status: 'completed',
       durationMinutes,
-      exercises: loggedExercises,
+      exercises: sanitizedExercises,
       loggedAt: new Date().toISOString(),
     });
 
@@ -401,10 +411,15 @@ export const ActiveGymLogger: React.FC<ActiveGymLoggerProps> = ({
                     <div className="flex items-baseline space-x-1 mt-1">
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="1"
-                        value={loggedEx.completedDurationMinutes || 20}
-                        onChange={(e) => handleUpdateCardio(exIdx, parseInt(e.target.value, 10) || 0)}
-                        className="w-16 bg-surface border border-border-subtle rounded-lg px-2 py-1 text-center font-bold text-textPrimary text-sm focus:outline-none focus:border-primary"
+                        value={loggedEx.completedDurationMinutes || ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          handleUpdateCardio(exIdx, v === '' ? 0 : parseInt(v, 10) || 0);
+                        }}
+                        placeholder="20"
+                        className="w-16 bg-surface border border-border-subtle rounded-lg px-2 py-1 text-center font-bold text-textPrimary text-sm focus:outline-none focus:border-primary placeholder:text-textMuted/40"
                       />
                       <span className="text-xs text-textMuted">minutes</span>
                     </div>

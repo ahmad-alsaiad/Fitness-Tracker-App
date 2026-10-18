@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarCheck2, ShieldAlert, CheckCircle2, XCircle, FileText, Scale, Dumbbell, Utensils, Check, Archive, Clock, Copy, CheckCheck, Trash2 } from 'lucide-react';
+import { CalendarCheck2, ShieldAlert, CheckCircle2, XCircle, FileText, Scale, Dumbbell, Utensils, Check, Archive, Clock, Copy, CheckCheck, Trash2, Moon } from 'lucide-react';
 import { db, weekDays, getTargetsForDate, isOfficialWeighInDay } from '../../db/db';
-import type { DailyBiometrics, DailyNutrition, DailyHabits, WorkoutLog, UserSettings, NoteEntry } from '../../types';
+import type { DailyBiometrics, DailyNutrition, DailyHabits, WorkoutLog, UserSettings, NoteEntry, PlannedWorkout } from '../../types';
 import { useConfirm } from '../common/useConfirm';
 
 interface ReviewViewProps {
@@ -12,6 +12,7 @@ interface ReviewViewProps {
 export const ReviewView: React.FC<ReviewViewProps> = ({ selectedDate, settings }) => {
   const [biometricsList, setBiometricsList] = useState<DailyBiometrics[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
+  const [plannedList, setPlannedList] = useState<PlannedWorkout[]>([]);
   const [nutritionList, setNutritionList] = useState<DailyNutrition[]>([]);
   const [habitsList, setHabitsList] = useState<DailyHabits[]>([]);
   const [scratchpadText, setScratchpadText] = useState<string>('');
@@ -28,12 +29,14 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ selectedDate, settings }
     async function loadWeeklyData() {
       const bios = await db.biometrics.where('date').anyOf(past7DaysKeys).toArray();
       const logs = await db.workoutLogs.where('date').anyOf(past7DaysKeys).toArray();
+      const plans = await db.plannedWorkouts.where('date').anyOf(past7DaysKeys).toArray();
       const nuts = await db.nutrition.where('date').anyOf(past7DaysKeys).toArray();
       const habs = await db.habits.where('date').anyOf(past7DaysKeys).toArray();
       const note = await db.scratchpadNotes.where('weekStartDate').equals(weekStartKey).first();
 
       setBiometricsList(bios);
       setWorkoutLogs(logs);
+      setPlannedList(plans);
       setNutritionList(nuts);
       setHabitsList(habs);
 
@@ -97,13 +100,16 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ selectedDate, settings }
     : 0;
   const fatsAdherence = avgFats && targets.fatsTarget ? Math.round((avgFats / targets.fatsTarget) * 100) : 0;
 
-  // Workouts Completion & Accountability
+  // Workouts Completion, Rest Days & Accountability
   const completedSessions = workoutLogs.filter((w) => w.status === 'completed');
   const justifiedSkips = workoutLogs.filter(
     (w) => w.status === 'cancelled' && w.cancellationType === 'justified'
   );
   const unjustifiedSkips = workoutLogs.filter(
     (w) => w.status === 'cancelled' && w.cancellationType === 'unjustified'
+  );
+  const restDays = plannedList.filter(
+    (p) => p.isRestDay && !workoutLogs.some((l) => l.date === p.date && l.status === 'completed')
   );
 
   // Scratchpad save to Archive
@@ -211,6 +217,9 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ selectedDate, settings }
             {completedSessions.length} <span className="text-xs text-textMuted font-normal">sessions</span>
           </span>
           <span className="text-[10px] text-textMuted block">
+            {restDays.length > 0 && (
+              <span className="text-primary font-semibold mr-1">{restDays.length} Rest {restDays.length === 1 ? 'Day' : 'Days'} • </span>
+            )}
             {unjustifiedSkips.length > 0 ? (
               <span className="text-danger font-semibold">{unjustifiedSkips.length} Unjustified Skip</span>
             ) : justifiedSkips.length > 0 ? (
@@ -266,55 +275,86 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ selectedDate, settings }
           </div>
         </div>
 
-        {workoutLogs.length === 0 ? (
+        {workoutLogs.length === 0 && restDays.length === 0 ? (
           <p className="text-center text-xs text-textMuted py-4 bg-canvas/60 rounded-xl border border-border-subtle">
             No workout events recorded during these 7 days.
           </p>
         ) : (
           <div className="space-y-2">
-            {workoutLogs.map((log, idx) => (
-              <div
-                key={idx}
-                className="p-3 rounded-xl bg-canvas border border-border-subtle/80 flex items-start justify-between text-xs"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center space-x-1.5">
-                    {log.status === 'completed' ? (
-                      <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
-                    ) : (
-                      <XCircle
-                        className={`w-4 h-4 flex-shrink-0 ${
-                          log.cancellationType === 'justified' ? 'text-success' : 'text-danger'
-                        }`}
-                      />
-                    )}
-                    <span className="font-bold text-textPrimary">{log.title}</span>
-                  </div>
-                  <span className="text-[10px] text-textMuted block pl-5.5">{log.date}</span>
-                  {log.cancellationReason && (
-                    <p className="text-[11px] text-textMuted pl-5.5 italic">
-                      "{log.cancellationReason}"
-                    </p>
-                  )}
-                </div>
+            {[
+              ...workoutLogs.map((log) => ({ kind: 'log' as const, log, date: log.date })),
+              ...restDays.map((r) => ({ kind: 'rest' as const, rest: r, date: r.date })),
+            ]
+              .sort((a, b) => a.date.localeCompare(b.date))
+              .map((item, idx) => {
+                if (item.kind === 'rest') {
+                  return (
+                    <div
+                      key={`rest-${idx}`}
+                      className="p-3 rounded-xl bg-canvas border border-border-subtle/80 flex items-start justify-between text-xs"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center space-x-1.5">
+                          <Moon className="w-4 h-4 text-primary flex-shrink-0" />
+                          <span className="font-bold text-textPrimary">{item.rest.title || 'Rest Day'}</span>
+                        </div>
+                        <span className="text-[10px] text-textMuted block pl-5.5">{item.date}</span>
+                        <p className="text-[11px] text-textMuted pl-5.5 italic">Scheduled recovery day</p>
+                      </div>
+                      <div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/15 text-primary border border-primary/30">
+                          Rest Day
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }
 
-                <div>
-                  {log.status === 'completed' ? (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-success/15 text-success border border-success/30">
-                      Completed
-                    </span>
-                  ) : log.cancellationType === 'justified' ? (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-success/15 text-success border border-success/30">
-                      Justified
-                    </span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-danger/15 text-danger border border-danger/30">
-                      Unjustified
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+                const log = item.log;
+                return (
+                  <div
+                    key={`log-${idx}`}
+                    className="p-3 rounded-xl bg-canvas border border-border-subtle/80 flex items-start justify-between text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <div className="flex items-center space-x-1.5">
+                        {log.status === 'completed' ? (
+                          <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" />
+                        ) : (
+                          <XCircle
+                            className={`w-4 h-4 flex-shrink-0 ${
+                              log.cancellationType === 'justified' ? 'text-success' : 'text-danger'
+                            }`}
+                          />
+                        )}
+                        <span className="font-bold text-textPrimary">{log.title}</span>
+                      </div>
+                      <span className="text-[10px] text-textMuted block pl-5.5">{log.date}</span>
+                      {log.cancellationReason && (
+                        <p className="text-[11px] text-textMuted pl-5.5 italic">
+                          "{log.cancellationReason}"
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      {log.status === 'completed' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-success/15 text-success border border-success/30">
+                          Completed
+                        </span>
+                      ) : log.cancellationType === 'justified' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-success/15 text-success border border-success/30">
+                          Justified
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-danger/15 text-danger border border-danger/30">
+                          Unjustified
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         )}
       </div>

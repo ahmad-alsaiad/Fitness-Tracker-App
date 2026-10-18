@@ -25,6 +25,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
           return (
             <button
               type="button"
+              id={`nav-tab-${tab.id}`}
+              data-testid={`nav-tab-${tab.id}`}
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               className={`flex flex-col items-center justify-center flex-1 h-full cursor-pointer transition-all duration-150 relative ${
