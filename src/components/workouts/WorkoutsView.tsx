@@ -101,10 +101,11 @@ export const WorkoutsView: React.FC<WorkoutsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsLibraryOpen(true)}
-              className="p-2 rounded-xl bg-surface border border-border-subtle text-textMuted hover:text-textPrimary hover:bg-canvas text-xs font-semibold transition-colors"
+              className="px-3 py-1.5 rounded-xl bg-surface border border-border-subtle text-textMuted hover:text-textPrimary hover:bg-canvas text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
               title="Exercise Library"
             >
-              <Library className="w-4 h-4" />
+              <Library className="w-3.5 h-3.5 text-primary" />
+              <span>Exercise Library</span>
             </button>
           </div>
         </div>

@@ -36,11 +36,12 @@ export const Header: React.FC<HeaderProps> = ({ selectedDate, onOpenSettings, on
           <button
             type="button"
             onClick={onOpenSettings}
-            className="p-2.5 rounded-xl text-textMuted hover:text-textPrimary bg-surface border border-border-subtle transition-colors"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-textMuted hover:text-textPrimary bg-surface border border-border-subtle transition-colors shadow-sm"
             title="Targets & Settings"
             aria-label="Open Targets and Settings"
           >
-            <SlidersHorizontal className="w-4 h-4" />
+            <SlidersHorizontal className="w-3.5 h-3.5 text-primary" />
+            <span>Targets & Settings</span>
           </button>
         </div>
       </div>
